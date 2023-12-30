@@ -1,261 +1,446 @@
 ﻿using BepInEx;
-using UnityEngine;
-using TMPro;
 using GameNetcodeStuff;
-using HarmonyLib;
-using System.Collections.Generic;
 using System;
-using Unity.Netcode;
-using System.Text.RegularExpressions;
-using System.Reflection;
-using BepInEx.Logging;
-using System.Text;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
 
-namespace PlayerMapNumbers
+namespace Rethunk.LC.RadarIdentQuickSwitch;
+
+[BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
+public class Plugin : BaseUnityPlugin
 {
-    [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
-    public class Plugin : BaseUnityPlugin
+    public static BepInEx.Logging.ManualLogSource LogSource { get; private set; }
+
+    #region Configuration
+    public static BepInEx.Configuration.ConfigFile config;
+
+    public enum IdentType
     {
-        public static ManualLogSource StaticLogger;
-        private void Awake()
+        Numeric = 0,
+        LatinAlphabet,
+        GreekAlphabet,
+        PhoneticNATO,
+        PhoneticIPA,
+    }
+
+    public static BepInEx.Configuration.ConfigEntry<bool> configGeneralEnabled;
+    public static BepInEx.Configuration.ConfigEntry<bool> configIdentBackfill;
+    public static BepInEx.Configuration.ConfigEntry<int> configIdentLength;
+    public static BepInEx.Configuration.ConfigEntry<bool> configIdentSequential;
+    public static BepInEx.Configuration.ConfigEntry<string> configIdentStart;
+    public static BepInEx.Configuration.ConfigEntry<string> configIdentType;
+
+    private static void LoadConfig()
+    {
+        configGeneralEnabled = config.Bind<bool>(
+            new BepInEx.Configuration.ConfigDefinition(
+                "General",
+                "Enabled"
+            ),
+            true,
+            new BepInEx.Configuration.ConfigDescription(
+                "Whether or not to enable the plugin. If disabled, <strong>None</strong> of the following options do anything.",
+                new BepInEx.Configuration.AcceptableValueList<bool>(true, false)
+            )
+        );
+
+        configIdentBackfill = config.Bind<bool>(
+            new BepInEx.Configuration.ConfigDefinition(
+                "Identifiers",
+                "Backfill"
+            ),
+            true,
+            new BepInEx.Configuration.ConfigDescription(
+                "Whether or not to backfill the identifiers of players that join mid-round.\n\nIf false, idents are not re-used.",
+                new BepInEx.Configuration.AcceptableValueList<bool>(true, false)
+            )
+        );
+
+        configIdentLength = config.Bind<int>(
+            new BepInEx.Configuration.ConfigDefinition(
+                "Identifiers",
+                "Length"
+            ),
+            3,
+            new BepInEx.Configuration.ConfigDescription(
+                "The length of the identifiers to use.\n\nIf sequential is enabled, this is the maximum length of the identifier.\n\nIf sequential is disabled, this is the exact length of the identifier.",
+                new BepInEx.Configuration.AcceptableValueRange<int>(1, 10)
+            )
+        );
+
+        configIdentSequential = config.Bind<bool>(
+            new BepInEx.Configuration.ConfigDefinition(
+                "Identifiers",
+                "Sequential"
+            ),
+            true,
+            new BepInEx.Configuration.ConfigDescription(
+                "Whether or not to use sequential identifiers.\n\nIf true, identifiers will be assigned in order of joining.\n\nIf false, identifiers will be assigned randomly.",
+                new BepInEx.Configuration.AcceptableValueList<bool>(true, false)
+            )
+        );
+
+        configIdentStart = config.Bind<string>(
+            new BepInEx.Configuration.ConfigDefinition(
+                "Identifiers",
+                "Start"
+            ),
+            "0",
+            new BepInEx.Configuration.ConfigDescription(
+                "The first identifier to use.\n\nIf sequential is enabled, this is the first identifier to use.\n\nIf sequential is disabled, this is the only identifier to use.",
+                new BepInEx.Configuration.AcceptableValueList<string>(
+                    "0 (Numeric)", "1 (Numeric)",
+                    "A (Latin)",
+                    "α (Greek)",
+                    "Alpha (NATO)",
+                    "Alfa (IPA)"
+                )
+            )
+        );
+
+        configIdentType = config.Bind<string>(
+            new BepInEx.Configuration.ConfigDefinition(
+                "Identifiers",
+                "Type"
+            ),
+            "Numeric",
+            new BepInEx.Configuration.ConfigDescription(
+                "The type of identifier to use.\n\nIf sequential is enabled, this is the type of identifier to use.\n\nIf sequential is disabled, this is ignored.",
+                new BepInEx.Configuration.AcceptableValueList<string>(
+                    "Numeric",
+                    "Latin Alphabet",
+                    "Greek Alphabet",
+                    "Phonetic (NATO)",
+                    "Phonetic (IPA)"
+                )
+            )
+        );
+    }
+    #endregion
+
+    #region Unity Methods
+    private void Awake()
+    {
+        config = Config;
+        LogSource = Logger;
+        LoadConfig();
+
+        LogSource.LogMessage("Applying patches to ManualCameraRenderer...");
+        On.ManualCameraRenderer.Awake += ManualCameraRenderer_Awake;
+        On.ManualCameraRenderer.AddTransformAsTargetToRadar += ManualCameraRenderer_AddTransformAsTargetToRadar;
+        On.ManualCameraRenderer.RemoveTargetFromRadar += ManualCameraRenderer_RemoveTargetFromRadar;
+
+        LogSource.LogMessage("Applying patches to PlayerControllerB...");
+        On.GameNetcodeStuff.PlayerControllerB.KillPlayerClientRpc += PlayerControllerB_KillPlayerClientRpc;
+        On.GameNetcodeStuff.PlayerControllerB.KillPlayerServerRpc += PlayerControllerB_KillPlayerServerRpc;
+        On.GameNetcodeStuff.PlayerControllerB.SendNewPlayerValuesClientRpc += PlayerControllerB_SendNewPlayerValuesClientRpc;
+        On.GameNetcodeStuff.PlayerControllerB.SendNewPlayerValuesServerRpc += PlayerControllerB_SendNewPlayerValuesServerRpc;
+        On.GameNetcodeStuff.PlayerControllerB.SpawnDeadBody += PlayerControllerB_SpawnDeadBody;
+
+        LogSource.LogMessage("Applying patch to Terminal...");
+        On.Terminal.ParsePlayerSentence += Terminal_ParsePlayerSentence;
+
+        LogSource.LogInfo($"{MyPluginInfo.PLUGIN_GUID} v{MyPluginInfo.PLUGIN_VERSION} was loaded!");
+    }
+
+    private void PlayerControllerB_DamageOnOtherClients(On.GameNetcodeStuff.PlayerControllerB.orig_DamageOnOtherClients orig, PlayerControllerB self, int damageNumber, int newHealthAmount)
+    {
+        throw new NotImplementedException();
+    }
+
+    private void OnDestroy()
+    {
+        LogSource.LogInfo($"{MyPluginInfo.PLUGIN_GUID} v{MyPluginInfo.PLUGIN_VERSION} was unloaded!");
+    }
+    #endregion
+
+    #region Radar Identification Logic
+    // tracks which GameObject belongs to which terminal quickswitch identifier
+    private static readonly Dictionary<GameObject, string> playerAssignments = [];
+    private static readonly Dictionary<string, GameObject> playerMapLabels = [];
+
+    internal static void TrackAllRadarTargets()
+    {
+        // If we're disabled, don't do it.
+        if (!configGeneralEnabled.Value) return;
+
+        var mapScreen = StartOfRound.Instance?.mapScreen;
+        if (mapScreen == null) return;
+
+        for (int i = 0; i < mapScreen.radarTargets.Count; ++i)
         {
-            // Plugin startup logic
-            Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
-            StaticLogger = Logger;
-            Harmony HarmonyInstance = new Harmony(PluginInfo.PLUGIN_GUID);
-            Logger.LogInfo($"Attempting to patch with Harmony!");
-            try
+            if (mapScreen.radarTargets[i]?.transform != null)
             {
-                HarmonyInstance.PatchAll();
-                Logger.LogInfo($"Patching success!");
+                StartTracking(mapScreen.radarTargets[i].transform.gameObject);
             }
-            catch (Exception ex)
-            {
-                StaticLogger.LogError("Failed to patch: " + ex?.ToString());
-            }
-
-
         }
-        public static void AddTargetNumber(UnityEngine.GameObject target, int number)
-        {
-            StaticLogger.LogInfo($"Adding index {number}");
-            // Alive players
-            GameObject parent = null;// target.transform.Find("Misc")?.Find("MapDot")?.gameObject;
-            var script = target.GetComponent<PlayerControllerB>();
+    }
 
-            if (script!=null&& script.isPlayerDead )
+    internal static void StartTracking(GameObject target)
+    {
+        // If we're disabled, don't do it.
+        if (!configGeneralEnabled.Value) return;
+
+        if (target == null) return;
+        GameObject mapDot = FindMapDot(target);
+        if (mapDot == null) return;
+
+        string identifier;
+        TextMeshPro tmpText;
+
+        // If we're not yet tracking the player, give them the next available identifier
+        if (!playerAssignments.ContainsKey(target))
+        {
+            int nextAvailable = 0;
+            while (playerAssignments.ContainsValue(nextAvailable.ToString())) nextAvailable++;
+            playerAssignments.Add(target, nextAvailable.ToString());
+        }
+
+        identifier = playerAssignments[target];
+        if (playerMapLabels.ContainsKey(identifier))
+        {
+            tmpText = playerMapLabels[identifier].GetComponent<TextMeshPro>();
+            tmpText.text = identifier;
+            return;
+        }
+
+        GameObject mapLabel = new();
+        mapLabel.transform.SetParent(mapDot.transform, false);
+        mapLabel.transform.SetLocalPositionAndRotation(new Vector3(0, 0.45f, 0), Quaternion.Euler(new Vector3(90, 0, 0)));
+        mapLabel.transform.localScale = Vector3.one * 0.45f;
+        mapLabel.layer = mapDot.layer;
+        mapLabel.name = "MapNumber";
+        mapLabel.AddComponent<Billboard>();
+
+        tmpText = mapLabel.AddComponent<TextMeshPro>();
+        tmpText.alignment = TextAlignmentOptions.Center;
+        tmpText.autoSizeTextContainer = false;
+        tmpText.color = Color.green;
+        tmpText.maxVisibleLines = 1;
+        tmpText.maxVisibleWords = 1;
+        tmpText.text = identifier;
+
+        playerMapLabels.Add(identifier, mapLabel);
+    }
+
+    internal static void StopTracking(GameObject target)
+    {
+        // If we're not tracking any player, we don't need to do anything.
+        if (!playerAssignments.TryGetValue(target, out string ident)) return;
+
+        // If the player has a map label, destroy it and forget about it.
+        if (playerMapLabels.TryGetValue(ident, out GameObject label))
+        {
+            playerMapLabels.Remove(ident);
+            if (label != null) Destroy(label);
+        }
+
+        // Finally, forget about the player assignment itself.
+        playerAssignments.Remove(target);
+    }
+
+    private static GameObject FindMapDot(GameObject target)
+    {
+        GameObject dot = null;
+
+        var player = target.GetComponent<PlayerControllerB>();
+        if (player != null)
+        {
+            // Dead Players direct the screen to their killer OR their body
+            if (player.isPlayerDead)
             {
-                StaticLogger.LogInfo("Dead");
-                if ( script.redirectToEnemy != null )
+                if (player.redirectToEnemy != null)
                 {
-                    parent = script.redirectToEnemy.transform.Find("Misc")?.Find("MapDot")?.gameObject;
+                    dot = player.redirectToEnemy.transform.Find("Misc")?.Find("MapDot")?.gameObject;
                 }
-                else if ( script.deadBody != null )
+                else if (player.deadBody != null)
                 {
-                    StaticLogger.LogInfo("Has body");
-                    parent = script.deadBody.transform.Find("MapDot")?.gameObject;
+                    dot = player.deadBody.transform.Find("MapDot")?.gameObject;
                 }
             }
             else
             {
-                StaticLogger.LogInfo("Not Dead");
-                parent = target.transform.Find("Misc")?.Find("MapDot")?.gameObject;
+                dot = target.transform.Find("Misc")?.Find("MapDot")?.gameObject;
             }
-
-            // Radar boosters
-            if (parent == null)
-            {
-                StaticLogger.LogInfo("Maybe Radar Booster");
-                parent = target.transform.Find("RadarBoosterDot")?.gameObject;
-            }
-
-            if (parent == null)
-            {
-                StaticLogger.LogWarning("No parent findable");
-                return;
-            }
-
-            GameObject labelObject = parent.transform.Find("TargetNumberLabel")?.gameObject;
-            TextMeshPro textRef;
-            if (labelObject == null)
-            {
-                labelObject = new GameObject();
-                labelObject.transform.SetParent(parent.transform, false);
-                labelObject.transform.SetLocalPositionAndRotation(new Vector3(0, 0.5f, 0), Quaternion.Euler(new Vector3(90, 0, 0)));
-                labelObject.transform.localScale = Vector3.one / 2.0f;
-                labelObject.layer = parent.layer;
-                labelObject.name = "TargetNumberLabel";
-                labelObject.AddComponent<KeepNorth>();
-                textRef = labelObject.AddComponent<TextMeshPro>();
-                textRef.alignment = TextAlignmentOptions.Center;
-                textRef.autoSizeTextContainer = true;
-                textRef.maxVisibleLines = 1;
-                textRef.maxVisibleWords = 1;
-            }
-            else
-            {
-                textRef = labelObject.transform.GetComponent<TextMeshPro>();
-            }
-            textRef.text = ( 1 + number ).ToString();
         }
 
-        static public void UpdateNumbers()
+        if (dot == null)
         {
-            if (StartOfRound.Instance?.mapScreen == null)
+            // At this point it might be a Radar Booster
+            dot = target.transform.Find("RadarBoosterDot")?.gameObject;
+        }
+
+        return dot;
+    }
+    #endregion
+
+    #region Hooked (MonoMod) Methods
+    private static void ManualCameraRenderer_Awake(
+        On.ManualCameraRenderer.orig_Awake orig,
+        ManualCameraRenderer self
+    )
+    {
+        orig(self);
+
+        if (self.NetworkManager == null || !self.NetworkManager.IsListening)
+            return;
+
+        TrackAllRadarTargets();
+    }
+
+    private static string ManualCameraRenderer_AddTransformAsTargetToRadar(
+        On.ManualCameraRenderer.orig_AddTransformAsTargetToRadar orig,
+        ManualCameraRenderer self,
+        Transform newTargetTransform,
+        string targetName,
+        bool isNonPlayer
+    )
+    {
+        string result = orig(self, newTargetTransform, targetName, isNonPlayer);
+
+        StartTracking(newTargetTransform.gameObject);
+
+        return result;
+    }
+
+    private static void ManualCameraRenderer_RemoveTargetFromRadar(
+        On.ManualCameraRenderer.orig_RemoveTargetFromRadar orig,
+        ManualCameraRenderer self,
+        Transform removeTransform
+    )
+    {
+        orig(self, removeTransform);
+
+        StopTracking(removeTransform.gameObject);
+    }
+
+    private void PlayerControllerB_KillPlayerServerRpc(
+        On.GameNetcodeStuff.PlayerControllerB.orig_KillPlayerServerRpc orig,
+        PlayerControllerB self,
+        int playerId,
+        bool spawnBody,
+        Vector3 bodyVelocity,
+        int causeOfDeath,
+        int deathAnimation
+    )
+    {
+        orig(self, playerId, spawnBody, bodyVelocity, causeOfDeath, deathAnimation);
+
+        // TODO: Downgrade to just modifying the label of the player that died
+        TrackAllRadarTargets();
+    }
+
+    private void PlayerControllerB_KillPlayerClientRpc(
+        On.GameNetcodeStuff.PlayerControllerB.orig_KillPlayerClientRpc orig,
+        PlayerControllerB self,
+        int playerId,
+        bool spawnBody,
+        Vector3 bodyVelocity,
+        int causeOfDeath,
+        int deathAnimation
+    )
+    {
+        orig(self, playerId, spawnBody, bodyVelocity, causeOfDeath, deathAnimation);
+
+        // TODO: Downgrade to just modifying the label of the player that died
+        TrackAllRadarTargets();
+    }
+
+    private void PlayerControllerB_SendNewPlayerValuesServerRpc(
+        On.GameNetcodeStuff.PlayerControllerB.orig_SendNewPlayerValuesServerRpc orig,
+        PlayerControllerB self,
+        ulong newPlayerSteamId
+    )
+    {
+        orig(self, newPlayerSteamId);
+
+        // TODO: Downgrade to just modifying the label of the player that joined
+        TrackAllRadarTargets();
+    }
+
+    private void PlayerControllerB_SendNewPlayerValuesClientRpc(
+        On.GameNetcodeStuff.PlayerControllerB.orig_SendNewPlayerValuesClientRpc orig,
+        PlayerControllerB self,
+        ulong[] playerSteamIds
+    )
+    {
+        orig(self, playerSteamIds);
+
+        // TODO: Downgrade to just modifying the label of the player that joined
+        TrackAllRadarTargets();
+    }
+
+    private void PlayerControllerB_SpawnDeadBody(
+        On.GameNetcodeStuff.PlayerControllerB.orig_SpawnDeadBody orig,
+        PlayerControllerB self,
+        int playerId,
+        Vector3 bodyVelocity,
+        int causeOfDeath,
+        PlayerControllerB deadPlayerController,
+        int deathAnimation,
+        Transform overridePosition
+    )
+    {
+        orig(self, playerId, bodyVelocity, causeOfDeath, deadPlayerController, deathAnimation, overridePosition);
+
+        // TODO: Downgrade to just modifying the label of the player that died
+        TrackAllRadarTargets();
+    }
+
+    private static string RemovePunctuation(string s)
+    {
+        System.Text.StringBuilder stringBuilder = new();
+        foreach (char c in s)
+        {
+            if (!char.IsPunctuation(c))
+                stringBuilder.Append(c);
+        }
+        return stringBuilder.ToString().ToLower();
+    }
+
+    private TerminalNode Terminal_ParsePlayerSentence(
+        On.Terminal.orig_ParsePlayerSentence orig,
+        Terminal self
+    )
+    {
+        TerminalNode result = orig(self);
+
+        // 10, 11, 12 parse errors
+        if (result != self.terminalNodes.specialNodes[10]) return result;
+
+        LogSource.LogInfo("Extended Parse");
+        string str1 = RemovePunctuation(self.screenText.text.Substring(self.screenText.text.Length - self.textAdded));
+        string[] strArray = str1.Split(" ", StringSplitOptions.RemoveEmptyEntries);
+        if (strArray.Length == 1 && int.TryParse(strArray[0], out int outputNum))
+        {
+            LogSource.LogInfo("Number Found");
+            int playerIndex = outputNum;
+            if (playerIndex < StartOfRound.Instance.mapScreen.radarTargets.Count)
             {
-                return;
-            }
-            for (int index = 0; index < StartOfRound.Instance.mapScreen.radarTargets.Count; ++index)
-            {
-                var transAndName = StartOfRound.Instance.mapScreen.radarTargets[index];
-                if (transAndName.transform != null)
+                LogSource.LogInfo("Valid Number");
+                var controller = StartOfRound.Instance.mapScreen.radarTargets[playerIndex].transform.gameObject.GetComponent<PlayerControllerB>();
+                if (controller != null && !controller.isPlayerControlled && !controller.isPlayerDead && controller.redirectToEnemy == null)
                 {
-                    StaticLogger.LogInfo($"Name: {transAndName.name} index: {index} isNonPlayer: {transAndName.isNonPlayer}");
-                    AddTargetNumber(transAndName.transform.gameObject, index);
+                    return null;
                 }
+                StartOfRound.Instance.mapScreen.SwitchRadarTargetAndSync(playerIndex);
+                LogSource.LogInfo("Updated Target");
+
+                return self.terminalNodes.specialNodes[20];
             }
         }
 
+        return result;
     }
+    #endregion
+}
 
-    public class KeepNorth : MonoBehaviour
+public class Billboard : MonoBehaviour
+{
+    public void Update()
     {
-        public void Awake()
-        {
-        }
-
-        public void Update()
-        {
-            // Lock to north, which is actully not on the expected vector
-            gameObject.transform.rotation = Quaternion.Euler(90, -45, 0);
-        }
+        // Forces the object to rotate "North" respective to the Manual Camera Renderer
+        gameObject.transform.rotation = Quaternion.Euler(90, -45, 0);
     }
-
-    [HarmonyPatch(typeof(ManualCameraRenderer), "Awake")]
-    public static class ManualCameraRendererAwakePatch
-    {
-        public static void Postfix(ManualCameraRenderer __instance)
-        {
-            Plugin.StaticLogger.LogInfo("ManualCameraRendererAwakePatch patch run");
-            NetworkManager networkManager = __instance.NetworkManager;
-            if ((UnityEngine.Object)networkManager == (UnityEngine.Object)null || !networkManager.IsListening)
-                return;
-            Plugin.UpdateNumbers();
-        }
-    }
-
-    [HarmonyPatch(typeof(ManualCameraRenderer), "RemoveTargetFromRadar")]
-    public static class ManualCameraRendererRemoveTargetFromRadarPatch
-    {
-        public static void Postfix(ManualCameraRenderer __instance, Transform removeTransform)
-        {
-            Plugin.StaticLogger.LogInfo("ManualCameraRendererRemoveTargetFromRadarPatch patch run");
-            Plugin.UpdateNumbers();
-        }
-    }
-
-    [HarmonyPatch(typeof(ManualCameraRenderer), "AddTransformAsTargetToRadar")]
-    public static class ManualCameraRendererAddTransformAsTargetToRadarPatch
-    {
-        public static void Postfix(ManualCameraRenderer __instance, Transform newTargetTransform, string targetName, bool isNonPlayer)
-        {
-            Plugin.StaticLogger.LogInfo("ManualCameraRendererAddTransformAsTargetToRadarPatch patch run");
-            Plugin.UpdateNumbers();
-        }
-    }
-
-    [HarmonyPatch(typeof(PlayerControllerB), "SendNewPlayerValuesClientRpc")]
-    public static class SendNewPlayerValuesClientRpcPatch
-    {
-        public static void Postfix(PlayerControllerB __instance, ref ulong[] playerSteamIds)
-        {
-            Plugin.StaticLogger.LogInfo("SendNewPlayerValuesClientRpcPatch patch run");
-            Plugin.UpdateNumbers();
-        }
-    }
-
-    [HarmonyPatch(typeof(PlayerControllerB), "SendNewPlayerValuesServerRpc")]
-    public static class SendNewPlayerValuesServerRpcPatch
-    {
-        public static void Postfix(PlayerControllerB __instance, ulong newPlayerSteamId)
-        {
-            Plugin.StaticLogger.LogInfo("SendNewPlayerValuesServerRpcPatch patch run");
-            Plugin.UpdateNumbers();
-        }
-    }
-
-    [HarmonyPatch(typeof(PlayerControllerB), "SpawnDeadBody")]
-    public static class SpawnDeadBodyPatch
-    {
-        public static void Postfix(PlayerControllerB __instance)
-        {
-            Plugin.StaticLogger.LogInfo("SpawnDeadBodyPatch patch run");
-            Plugin.UpdateNumbers();
-        }
-    }
-
-    [HarmonyPatch(typeof(PlayerControllerB), "KillPlayerServerRpc")]
-    public static class KillPlayerServerRpcPatch
-    {
-        public static void Postfix(PlayerControllerB __instance)
-        {
-            Plugin.StaticLogger.LogInfo("KillPlayerServerRpcPatch patch run");
-            Plugin.UpdateNumbers();
-        }
-    }
-
-    [HarmonyPatch(typeof(PlayerControllerB), "KillPlayerClientRpc")]
-    public static class KillPlayerClientRpcPatch
-    {
-        public static void Postfix(PlayerControllerB __instance)
-        {
-            Plugin.StaticLogger.LogInfo("KillPlayerClientRpcPatch patch run");
-            Plugin.UpdateNumbers();
-        }
-    }
-
-    [HarmonyPatch(typeof(Terminal), "ParsePlayerSentence")]
-    public static class TerminalParsePlayerSentencePatch
-    {
-        static private string RemovePunctuation(string s)
-        {
-            StringBuilder stringBuilder = new StringBuilder();
-            foreach (char c in s)
-            {
-                if (!char.IsPunctuation(c))
-                    stringBuilder.Append(c);
-            }
-            return stringBuilder.ToString().ToLower();
-        }
-        public static void Postfix(Terminal __instance, ref TerminalNode __result)
-        {
-            Plugin.StaticLogger.LogInfo("TerminalParsePlayerSentence patch run");
-            // 10, 11, 12 parse errors
-            if (__result == __instance.terminalNodes.specialNodes[10]) {
-                Plugin.StaticLogger.LogInfo("Extended Parse");
-                string str1 = RemovePunctuation(__instance.screenText.text.Substring(__instance.screenText.text.Length - __instance.textAdded));
-                string[] strArray = str1.Split(" ", StringSplitOptions.RemoveEmptyEntries);
-                int outputNum;
-                if ( strArray.Length == 1 && int.TryParse( strArray[0], out outputNum ) )
-                {
-                    Plugin.StaticLogger.LogInfo("Number Found");
-                    int playerIndex = outputNum - 1;
-                    if ( playerIndex < StartOfRound.Instance.mapScreen.radarTargets.Count )
-                    {
-                        Plugin.StaticLogger.LogInfo("Valid Number");
-                        var controller = StartOfRound.Instance.mapScreen.radarTargets[playerIndex].transform.gameObject.GetComponent<PlayerControllerB>();
-                        if ( controller != null &&
-                             !controller.isPlayerControlled && !controller.isPlayerDead && controller.redirectToEnemy == null )
-                        {
-                            return;
-                        }
-                        StartOfRound.Instance.mapScreen.SwitchRadarTargetAndSync(playerIndex);
-                        Plugin.StaticLogger.LogInfo("Updated Target");
-                        __result = __instance.terminalNodes.specialNodes[20];
-                    }
-                }
-            }
-        }
-    }
-
 }
