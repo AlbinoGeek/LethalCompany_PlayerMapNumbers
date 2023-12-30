@@ -138,8 +138,6 @@ public class Plugin : BaseUnityPlugin
         On.GameNetcodeStuff.PlayerControllerB.SendNewPlayerValuesServerRpc += PlayerControllerB_SendNewPlayerValuesServerRpc;
         On.GameNetcodeStuff.PlayerControllerB.SpawnDeadBody += PlayerControllerB_SpawnDeadBody;
 
-        On.Shovel.
-
         LogSource.LogMessage("Applying patch to Terminal...");
         On.Terminal.ParsePlayerSentence += Terminal_ParsePlayerSentence;
 
