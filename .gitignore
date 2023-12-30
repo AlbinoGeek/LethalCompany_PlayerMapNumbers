@@ -11,6 +11,13 @@
 /[Uu]ser[Ss]ettings/
 /BepInEx/
 
+# Thunderstore build
+/Thunderstore/**/*.dll
+/Thunderstore/**/*.pdb
+/Thunderstore/**/Changelog.md
+/Thunderstore/**/LICENSE.md
+/Thunderstore/**/README.md
+
 # MemoryCaptures can get excessive in size.
 # They also could contain extremely sensitive data
 /[Mm]emoryCaptures/
