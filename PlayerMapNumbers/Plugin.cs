@@ -138,6 +138,8 @@ public class Plugin : BaseUnityPlugin
         On.GameNetcodeStuff.PlayerControllerB.SendNewPlayerValuesServerRpc += PlayerControllerB_SendNewPlayerValuesServerRpc;
         On.GameNetcodeStuff.PlayerControllerB.SpawnDeadBody += PlayerControllerB_SpawnDeadBody;
 
+        On.Shovel.
+
         LogSource.LogMessage("Applying patch to Terminal...");
         On.Terminal.ParsePlayerSentence += Terminal_ParsePlayerSentence;
 
@@ -404,23 +406,19 @@ public class Plugin : BaseUnityPlugin
         // 10, 11, 12 parse errors
         if (result != self.terminalNodes.specialNodes[10]) return result;
 
-        LogSource.LogInfo("Extended Parse");
         string str1 = RemovePunctuation(self.screenText.text.Substring(self.screenText.text.Length - self.textAdded));
         string[] strArray = str1.Split(" ", StringSplitOptions.RemoveEmptyEntries);
         if (strArray.Length == 1 && int.TryParse(strArray[0], out int outputNum))
         {
-            LogSource.LogInfo("Number Found");
             int playerIndex = outputNum;
             if (playerIndex < StartOfRound.Instance.mapScreen.radarTargets.Count)
             {
-                LogSource.LogInfo("Valid Number");
                 var controller = StartOfRound.Instance.mapScreen.radarTargets[playerIndex].transform.gameObject.GetComponent<PlayerControllerB>();
                 if (controller != null && !controller.isPlayerControlled && !controller.isPlayerDead && controller.redirectToEnemy == null)
                 {
                     return null;
                 }
                 StartOfRound.Instance.mapScreen.SwitchRadarTargetAndSync(playerIndex);
-                LogSource.LogInfo("Updated Target");
 
                 return self.terminalNodes.specialNodes[20];
             }
