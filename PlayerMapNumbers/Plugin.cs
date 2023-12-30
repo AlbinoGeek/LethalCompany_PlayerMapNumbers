@@ -144,11 +144,6 @@ public class Plugin : BaseUnityPlugin
         LogSource.LogInfo($"{MyPluginInfo.PLUGIN_GUID} v{MyPluginInfo.PLUGIN_VERSION} was loaded!");
     }
 
-    private void PlayerControllerB_DamageOnOtherClients(On.GameNetcodeStuff.PlayerControllerB.orig_DamageOnOtherClients orig, PlayerControllerB self, int damageNumber, int newHealthAmount)
-    {
-        throw new NotImplementedException();
-    }
-
     private void OnDestroy()
     {
         LogSource.LogInfo($"{MyPluginInfo.PLUGIN_GUID} v{MyPluginInfo.PLUGIN_VERSION} was unloaded!");
