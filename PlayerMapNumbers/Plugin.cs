@@ -15,21 +15,21 @@ public class Plugin : BaseUnityPlugin
     #region Configuration
     public static BepInEx.Configuration.ConfigFile config;
 
-    public enum IdentType
+    /*public enum IdentType
     {
         Numeric = 0,
         LatinAlphabet,
         GreekAlphabet,
         PhoneticNATO,
         PhoneticIPA,
-    }
+    }*/
 
     public static BepInEx.Configuration.ConfigEntry<bool> configGeneralEnabled;
-    public static BepInEx.Configuration.ConfigEntry<bool> configIdentBackfill;
+    /*public static BepInEx.Configuration.ConfigEntry<bool> configIdentBackfill;
     public static BepInEx.Configuration.ConfigEntry<int> configIdentLength;
     public static BepInEx.Configuration.ConfigEntry<bool> configIdentSequential;
     public static BepInEx.Configuration.ConfigEntry<string> configIdentStart;
-    public static BepInEx.Configuration.ConfigEntry<string> configIdentType;
+    public static BepInEx.Configuration.ConfigEntry<string> configIdentType;*/
 
     private static void LoadConfig()
     {
@@ -45,7 +45,7 @@ public class Plugin : BaseUnityPlugin
             )
         );
 
-        configIdentBackfill = config.Bind<bool>(
+        /*configIdentBackfill = config.Bind<bool>(
             new BepInEx.Configuration.ConfigDefinition(
                 "Identifiers",
                 "Backfill"
@@ -115,7 +115,7 @@ public class Plugin : BaseUnityPlugin
                     "Phonetic (IPA)"
                 )
             )
-        );
+        );*/
     }
     #endregion
 
