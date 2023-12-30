@@ -1,12 +1,11 @@
-# Version 0.1.1:
+# Changelog for Radar Ident QuickSwitch
 
-- Potentially fix mimic map numbers, as before you could tell if someone put on the mask etc
+## [0.1.3.116] - 2023-12-28
 
+### Added
 
-# Version 0.1.0:
+- Completely rewrite the original mod to be more efficient and to support more features.
+- Moved all the hooking from using Harmony to using MonoMod.
+- Initial release of Radar Ident QuickSwitch.
 
-- Fixed indexing beyond the initial 4
-
-- Fixed radar boosters
-
-- Fixed dead bodies
+For more detailed information on changes, bug fixes, and known issues, please refer to our GitHub repository's issue tracker and commit history.
