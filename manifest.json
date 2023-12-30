@@ -1,9 +1,0 @@
-{
-    "name": "PlayerMapNumbers",
-    "version_number": "0.1.1",
-    "website_url": "https://github.com/dslogget/LethalCompany_PlayerMapNumbers",
-    "description": "Adds numbers over player radar icons, and enables switching using numbers",
-    "dependencies": [
-        "BepInEx-BepInExPack-5.4.2100"
-    ]
-}

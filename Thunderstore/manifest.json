@@ -1,0 +1,8 @@
+{
+  "name": "Radar_Ident_QuickSwitch",
+  "version_number": "0.1.5",
+  "website_url": "https://lethalmodding.com/",
+  "description": "Adds numbers over player radar icons, enabling for faster terminal switching.",
+  "dependencies": ["BepInEx-BepInExPack-5.4.2100"],
+  "incompatibilities": ["dslogget-PlayerMapNumbers-0.1.1"]
+}
