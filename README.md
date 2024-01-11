@@ -37,7 +37,7 @@ Please make sure you have the following dependencies installed (if using the man
 
 ## Support
 
-If you encounter any issues or have suggestions, please visit our [GitHub issues page](https://github.com/LethalModding/Radar_Ident_QuickSwitch/issues) to report them. If you would like **even faster** support, you can [join our Discord server](https://dsc.gg/lcmodding) and ask for help in the #help-and-support channel. We will do our best to help you as soon as possible.
+If you encounter any issues or have suggestions, please visit [our GitHub issues page](https://github.com/LethalModding/Radar_Ident_QuickSwitch/issues) to report them. If you would like **even faster** support, you can join [our Discord server](https://dsc.gg/lcmodding) and ask for help in the #help-and-support channel. We will do our best to help you as soon as possible.
 
 ## Contributing
 
