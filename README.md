@@ -33,15 +33,15 @@ Once installed, you will see (by default) digits appear over the icons of your r
 
 Please make sure you have the following dependencies installed (if using the manual download method):
 
-- BepInExPack (version 5.4.2100 or higher)
+- [BepInExPack (version 5.4.2100 or higher)](https://thunderstore.io/c/lethal-company/p/BepInEx/BepInExPack/)
 
 ## Support
 
-If you encounter any issues or have suggestions, please visit our GitHub issues page to report them. If you would like **even faster** support, you can [join our Discord server](https://dsc.gg/lcmodding) and ask for help in the #help-and-support channel. We will do our best to help you as soon as possible.
+If you encounter any issues or have suggestions, please visit our [GitHub issues page](https://github.com/LethalModding/Radar_Ident_QuickSwitch/issues) to report them. If you would like **even faster** support, you can [join our Discord server](https://dsc.gg/lcmodding) and ask for help in the #help-and-support channel. We will do our best to help you as soon as possible.
 
 ## Contributing
 
-If you would like to contribute to this project, please fork the repository and submit a pull request. We will review your changes and merge them if they are satisfactory. If you have any questions, feel free to ask in our Discord server.
+If you would like to contribute to this project, please fork the repository and submit a pull request. We will review your changes and merge them if they are satisfactory. If you have any questions, feel free to ask in [our Discord server](https://dsc.gg/lcmodding).
 
 ## Attribution
 
