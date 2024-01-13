@@ -76,7 +76,7 @@ body:
     id: logs
     attributes:
       label: Relevant log output
-      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks. If you're not sure what to include, just paste the whole thing! ![HOW](LethalModding/Radar_Ident_QuickSwitch/blob/main/docs/images/r2mm-copy-game-log.png?raw=true)
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks. If you're not sure what to include, just paste the whole thing! ![HOW](/LethalModding/Radar_Ident_QuickSwitch/blob/main/docs/images/r2mm-copy-game-log.png?raw=true)
       render: PowerShell
 
   - type: checkboxes
